@@ -29,6 +29,8 @@ PROVIDER_DEFAULTS: dict = {
     "proxy_password": "",
     # Categorieën waarvoor geen regel of handmatige keuze geldt (dus ook nieuwe).
     "default_show": True,
+    # Kanalen, films en series die bij geen enkele categorie horen.
+    "uncategorized": {t: True for t in TYPES},
     # Regels op naam; de eerste die past, telt.
     "rules": [],
     # Handmatige keuze per categorie-id; gaat voor op de regels.
@@ -79,7 +81,8 @@ def decide(prov: dict, kind: str, category_id, name: str | None) -> tuple[bool, 
 
 def filters_active(prov: dict, kind: str) -> bool:
     """False als er voor dit type niets gefilterd hoeft te worden."""
-    return (not prov["default_show"] or bool(prov["overrides"][kind])
+    return (not prov["default_show"] or not prov["uncategorized"][kind]
+            or bool(prov["overrides"][kind])
             or any(r["kind"] in ("all", kind) for r in prov["rules"]))
 
 
@@ -113,6 +116,13 @@ def clean_overrides(overrides) -> dict:
     return out
 
 
+def clean_uncategorized(value) -> dict:
+    out = {t: True for t in TYPES}
+    if isinstance(value, dict):
+        out.update({t: value[t] for t in TYPES if isinstance(value.get(t), bool)})
+    return out
+
+
 class Settings:
     def __init__(self, data_dir: Path | None = None):
         self.data_dir = Path(data_dir) if data_dir else DATA_DIR
@@ -138,8 +148,10 @@ class Settings:
                 continue
             prov = copy.deepcopy(PROVIDER_DEFAULTS)
             for key, default in PROVIDER_DEFAULTS.items():
-                if key not in ("rules", "overrides") and isinstance(raw.get(key), type(default)):
+                if key not in ("rules", "overrides", "uncategorized") \
+                        and isinstance(raw.get(key), type(default)):
                     prov[key] = raw[key]
+            prov["uncategorized"] = clean_uncategorized(raw.get("uncategorized"))
             try:
                 prov["rules"] = clean_rules(raw.get("rules") or [])
             except SettingsError:
@@ -234,7 +246,8 @@ class Settings:
         self.providers = [p for p in self.providers if p["id"] != pid]
         self.save()
 
-    def set_filter(self, pid: str, default_show=None, rules=None, overrides=None) -> None:
+    def set_filter(self, pid: str, default_show=None, rules=None, overrides=None,
+                   uncategorized=None) -> None:
         prov = self.provider(pid)
         if rules is not None:
             prov["rules"] = clean_rules(rules)
@@ -242,4 +255,6 @@ class Settings:
             prov["overrides"] = clean_overrides(overrides)
         if default_show is not None:
             prov["default_show"] = bool(default_show)
+        if uncategorized is not None:
+            prov["uncategorized"] = clean_uncategorized(uncategorized)
         self.save()

@@ -259,9 +259,16 @@ function visible() {
   const q = $('search').value.trim().toLowerCase();
   return F.categories[kind].filter(c => !q || c.name.toLowerCase().includes(q));
 }
+function loose() {  // aantal items dat bij geen enkele categorie hoort
+  const cnt = counts[kind]; if (!cnt) return 0;
+  const ids = new Set(F.categories[kind].map(c => c.id));
+  return Object.entries(cnt).reduce((n, [id, v]) => n + (ids.has(id) ? 0 : v), 0);
+}
 function renderList() {
-  const cnt = counts[kind] || {};
-  $('list').innerHTML = visible().map(c => {
+  const cnt = counts[kind] || {}, n = loose(), un = F.uncategorized[kind];
+  const top = n && !$('search').value.trim() ? `<div class="cat ${un ? '' : 'off'}" data-un="1"><input type="checkbox" ${un ? 'checked' : ''}>
+      <span class="name"><em>Zonder categorie</em></span><span class="tag">valt buiten de regels</span><span class="n">${n}</span></div>` : '';
+  $('list').innerHTML = top + visible().map(c => {
     const d = decide(kind, c);
     const tag = d.why === 'manual' ? `<span class="tag manual">handmatig</span><button class="small undo" title="Weer de regels volgen">↺</button>` :
       d.why === 'rule' ? `<span class="tag" title="${esc(F.rules[d.idx].text)}">regel</span>` : '';
@@ -273,6 +280,10 @@ function renderList() {
   $('catinfo').textContent = `${on} van ${all.length} categorieën zichtbaar in je app` + (man ? `, ${man} handmatig gekozen` : '');
 }
 $('list').onclick = (e) => {
+  const un = e.target.closest('.cat[data-un]');
+  if (un && (e.target.type === 'checkbox' || e.target.closest('.name'))) {
+    F.uncategorized[kind] = !F.uncategorized[kind]; setDirty(true); renderList(); return;
+  }
   const row = e.target.closest('.cat'); if (!row || !row.dataset.id) return;
   const id = row.dataset.id, c = F.categories[kind].find(x => x.id === id);
   if (e.target.classList.contains('undo')) delete F.overrides[kind][id];
@@ -317,7 +328,7 @@ async function loadFilter() {
 $('provsel').onchange = () => { if (!leave()) { $('provsel').value = pid; return; } pid = $('provsel').value; loadFilter(); };
 $('savefilter').onclick = async () => {
   try {
-    await api('api/filter', {provider: pid, default_show: F.default_show, rules: F.rules, overrides: F.overrides});
+    await api('api/filter', {provider: pid, default_show: F.default_show, rules: F.rules, overrides: F.overrides, uncategorized: F.uncategorized});
     F.rules = F.rules.filter(r => r.text.trim());
     setDirty(false); renderRules(); renderChips(); renderList(); toast('Opgeslagen');
   } catch (e) { toast(e.message); }

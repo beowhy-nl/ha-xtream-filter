@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Kanalen, films en series zonder categorie hebben een eigen regel "Zonder
+  categorie" in de lijst. Ze worden standaard getoond en vallen buiten de
+  regels en de standaard voor categorieën.
+
 ## 0.2.2
 
 - Voorvoegsels met andere scheidingstekens (zoals `┃NL┃`) en met spaties

@@ -136,6 +136,7 @@ class AdminApi:
         lists = await asyncio.gather(*(catalog.categories(t) for t in TYPES))
         return web.json_response({
             "default_show": prov["default_show"],
+            "uncategorized": prov["uncategorized"],
             "rules": prov["rules"],
             "overrides": prov["overrides"],
             "categories": {t: [{"id": str(c.get("category_id")),
@@ -147,7 +148,8 @@ class AdminApi:
         body = await request.json()
         pid = body.get("provider") or ""
         self.settings.set_filter(pid, default_show=body.get("default_show"),
-                                 rules=body.get("rules"), overrides=body.get("overrides"))
+                                 rules=body.get("rules"), overrides=body.get("overrides"),
+                                 uncategorized=body.get("uncategorized"))
         self.catalogs.get(pid).invalidate_filtered()
         return web.json_response({"ok": True})
 

@@ -1,5 +1,5 @@
 name: Xtream Filter
-version: "0.2.2"
+version: "0.2.3"
 slug: xtream_filter
 description: Filterproxy voor Xtream IPTV - verberg categorieën die je niet wilt zien
 url: https://github.com/beowhy-nl/ha-xtream-filter

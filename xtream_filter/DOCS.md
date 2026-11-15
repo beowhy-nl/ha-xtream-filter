@@ -45,6 +45,10 @@ Voor elke categorie wordt in deze volgorde gekeken:
 3. **Standaard**: wat er gebeurt met categorieën waar geen regel voor geldt. Dit
    staat op *Tonen*.
 
+Sommige kanalen, films of series horen bij geen enkele categorie. Die staan
+bovenaan de lijst als **Zonder categorie**. Ze vallen buiten de regels en de
+standaard: je vinkt ze daar zelf aan of uit. Standaard worden ze getoond.
+
 Regels en de standaard gelden ook voor categorieën die de provider later
 toevoegt. Een nieuwe categorie verschijnt dus vanzelf in je app, tenzij een regel
 hem verbergt.

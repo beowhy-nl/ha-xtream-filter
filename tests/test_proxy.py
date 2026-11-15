@@ -260,6 +260,26 @@ async def test_rule_scope_and_new_categories(env):
         del CATS["vod"][2:]
 
 
+async def test_uncategorized_items(env):
+    STREAMS["live"].append({"num": 9, "name": "Los kanaal", "stream_id": 109,
+                            "category_id": None, "epg_channel_id": "los.nl"})
+    try:
+        # Standaard verbergen met een toon-regel: het losse kanaal blijft staan.
+        env.settings.set_filter(env.pid, default_show=False, rules=[rule("nl", "show")])
+        ids = [s["stream_id"] for s in await get_json(env.pub, action="get_live_streams")]
+        assert ids == [101, 104, 109]
+        # Uitgevinkt: weg, ook al staat de standaard op tonen.
+        env.settings.set_filter(env.pid, default_show=True, rules=[],
+                                uncategorized={"live": False})
+        env.catalogs.get(env.pid).invalidate_filtered()
+        ids = [s["stream_id"] for s in await get_json(env.pub, action="get_live_streams")]
+        assert ids == [101, 102, 103, 104]
+        assert Settings(env.settings.data_dir).provider(env.pid)["uncategorized"] == {
+            "live": False, "vod": True, "series": True}
+    finally:
+        STREAMS["live"].pop()
+
+
 async def test_multiple_providers(env):
     second = {"username": "tweede", "password": "ander-wachtwoord2"}
     with pytest.raises(SettingsError):  # gebruikersnaam voor de app moet uniek zijn
@@ -403,6 +423,7 @@ async def test_admin_flow(env):
 
     flt = await (await env.adm.get(f"/api/filter?provider={env.pid}")).json()
     assert flt["default_show"] is True and flt["rules"] == []
+    assert flt["uncategorized"] == {"live": True, "vod": True, "series": True}
     assert [c["name"] for c in flt["categories"]["live"]] == ["NL", "Sport", "Arabic"]
     counts = await (await env.adm.get(f"/api/counts?provider={env.pid}&type=live")).json()
     assert counts == {"1": 1, "2": 1, "3": 2}

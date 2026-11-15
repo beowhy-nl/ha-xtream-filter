@@ -229,10 +229,9 @@ class Catalog:
                  for c in await self.categories(kind, ua)}
 
         def allowed(cid) -> bool:
-            cid = str(cid)
-            if cid in known:
-                return known[cid]
-            return decide(prov, kind, cid, "")[0]
+            # Hoort een item bij geen enkele (bekende) categorie, dan geldt de
+            # aparte keuze "Zonder categorie" en niet de standaard voor categorieën.
+            return known.get(str(cid), prov["uncategorized"][kind])
         return allowed
 
     # ---- kanalen, films en series -------------------------------------
