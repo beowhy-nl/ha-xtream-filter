@@ -110,6 +110,8 @@ Kies in de app voor een Xtream-account en vul in:
 ## Beveiliging en privacy
 
 - De beheerpagina is alleen via Home Assistant bereikbaar, niet via poort 8899.
+- Via het subdomein werkt alleen `https://`. Een verzoek over `http://` wordt
+  geweigerd, zodat je inloggegevens niet onversleuteld verstuurd worden.
 - Na 10 mislukte inlogpogingen binnen 10 minuten wordt een adres 15 minuten
   geblokkeerd.
 - De add-on houdt niet bij welke streams worden opgevraagd.

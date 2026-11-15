@@ -83,6 +83,10 @@ class PublicApi:
     async def _middleware(self, request: web.Request, handler):
         if self.guard.is_blocked(client_ip(request)):
             return web.Response(status=429, text="Too many attempts")
+        # Via de tunnel alleen https: anders gaan de inloggegevens onversleuteld
+        # naar Cloudflare. Rechtstreeks in het thuisnetwerk ontbreekt deze header.
+        if request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower() == "http":
+            return web.Response(status=403, text="HTTPS required")
         try:
             return await handler(request)
         except UpstreamError as exc:

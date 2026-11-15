@@ -165,6 +165,16 @@ async def test_wrong_password_and_lockout(env):
     assert resp.status == 429
 
 
+async def test_plain_http_through_tunnel_is_refused(env):
+    for path in ("/player_api.php", f"/live/{PX_USER}/{PX_PASS}/1.ts", "/xmltv.php"):
+        resp = await env.pub.get(path, params=AUTH, allow_redirects=False,
+                                 headers={"X-Forwarded-Proto": "http"})
+        assert resp.status == 403 and await resp.text() == "HTTPS required"
+    assert env.mock.hits == []
+    # Rechtstreeks in het thuisnetwerk (zonder die header) blijft http werken.
+    assert (await env.pub.get("/player_api.php", params=AUTH)).status == 200
+
+
 async def test_unfiltered_by_default(env):
     assert len(await get_json(env.pub, action="get_live_categories")) == 3
     assert len(await get_json(env.pub, action="get_live_streams")) == 4

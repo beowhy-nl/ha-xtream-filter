@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- Verzoeken die via de tunnel over onversleuteld http binnenkomen, worden
+  geweigerd. Rechtstreeks in het thuisnetwerk blijft http werken.
+
 ## 0.2.3
 
 - Kanalen, films en series zonder categorie hebben een eigen regel "Zonder
