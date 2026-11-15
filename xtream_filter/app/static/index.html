@@ -187,7 +187,13 @@ function decide(k, c) {
   return {on: F.default_show, why: 'default'};
 }
 function prefixOf(name) {
-  const m = name.match(/^\s*[|\[({]?\s*[\p{L}\p{N}+&]{1,8}\s*[|\])}:\-–]/u);
+  const s = name.trimStart(), first = s[0];
+  // Naam begint met een scheidingsteken: het voorvoegsel loopt tot het volgende, bv. "┃NL┃".
+  if (first && '|┃│║¦'.includes(first)) {
+    const end = s.indexOf(first, 1);
+    return end > 1 && end <= 30 ? s.slice(0, end + 1) : null;
+  }
+  const m = s.match(/^[\[({]?\s*[\p{L}\p{N}+&]{1,8}\s*[|┃│║¦\])}:\-–]/u);
   return m ? m[0].trim() : null;
 }
 

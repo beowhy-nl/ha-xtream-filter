@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Voorvoegsels met andere scheidingstekens (zoals `┃NL┃`) en met spaties
+  (zoals `┃MULTI / LINGO┃`) worden nu ook herkend.
+
 ## 0.2.1
 
 - Het tabblad Categorieën laadt opnieuw nadat je de VPN-instellingen hebt
