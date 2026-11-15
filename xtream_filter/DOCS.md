@@ -20,19 +20,57 @@ IPTV-app ═══════════════ video rechtstreeks ══
 ## Instellen
 
 1. Start de add-on en open **IPTV Filter** in de zijbalk.
-2. **Instellingen → Je IPTV-provider**: vul de server-URL, gebruikersnaam en het
-   wachtwoord van je provider in.
-3. **Instellingen → Inloggegevens voor je IPTV-app**: kies een gebruikersnaam en
-   laat een wachtwoord genereren. Deze gegevens vul je straks in je app in.
-4. **Instellingen → VPN**: plak de inhoud van een WireGuard `.conf`-bestand.
+2. **VPN en overig**: plak de inhoud van een WireGuard `.conf`-bestand en sla op.
    Bij Surfshark: *VPN → Manual setup → Router → WireGuard*, maak een sleutelpaar
    aan, kies een locatie en download het bestand.
-5. Klik op **Instellingen opslaan** en controleer op het tabblad **Status** of de
-   VPN werkt en het inloggen bij de provider lukt.
-6. **Categorieën**: vink uit wat je niet wilt zien en klik op **Opslaan**. Doe dit
-   voor Live-tv, Films en Series.
+3. **Providers → Provider toevoegen**: vul de server-URL, gebruikersnaam en het
+   wachtwoord van je provider in. Kies daaronder een gebruikersnaam voor je app
+   en laat een wachtwoord genereren.
+4. Controleer op het tabblad **Status** of de VPN werkt en het inloggen lukt.
+5. **Categorieën**: stel in wat je app te zien krijgt (zie hieronder) en klik op
+   **Opslaan**.
 
-Zolang je voor een type nog niets hebt opgeslagen, ziet je app daar alles.
+Zolang de VPN aanstaat en er geen werkende WireGuard-configuratie is, haalt de
+add-on niets op bij de provider.
+
+## Categorieën filteren
+
+Voor elke categorie wordt in deze volgorde gekeken:
+
+1. **Handmatige keuze**: een vinkje dat je zelf in de lijst hebt gezet of
+   weggehaald. Dit gaat altijd voor. Met ↺ haal je de keuze weer weg.
+2. **Regels op naam**: bijvoorbeeld *naam begint met `| AR |` → verbergen*. De
+   bovenste regel die past, telt. Hoofdletters maken niet uit. Een regel kan
+   overal gelden of alleen voor live-tv, films of series.
+3. **Standaard**: wat er gebeurt met categorieën waar geen regel voor geldt. Dit
+   staat op *Tonen*.
+
+Regels en de standaard gelden ook voor categorieën die de provider later
+toevoegt. Een nieuwe categorie verschijnt dus vanzelf in je app, tenzij een regel
+hem verbergt.
+
+Onder **Gevonden voorvoegsels** staan de codes die de add-on in de namen
+herkent, zoals `| NL |`. Met *Tonen* of *Verbergen* maak je er direct een regel
+van.
+
+Twee manieren om het in te richten:
+
+- **Alles tonen, behalve…**: laat de standaard op *Tonen* en maak
+  verberg-regels voor de talen die je niet wilt.
+- **Alleen tonen wat ik kies**: zet de standaard op *Verbergen* en maak
+  toon-regels, bijvoorbeeld voor `| NL |`. Nieuwe categorieën die niet aan een
+  regel voldoen, blijven dan verborgen.
+
+## Meerdere providers
+
+Elke provider heeft een eigen filter en eigen inloggegevens voor je app. In je
+app voeg je elke provider toe als apart account, met hetzelfde serveradres en de
+inloggegevens van die provider.
+
+Vervang je een provider door een andere, pas dan bij **Providers** de gegevens
+aan. In je app hoef je niets te wijzigen. Je handmatige keuzes worden dan gewist,
+omdat die bij de categorienummers van de oude provider horen. Je regels op naam
+blijven staan.
 
 ## Bereikbaar maken via Cloudflare
 
@@ -57,7 +95,8 @@ Zet op dit subdomein geen Cloudflare Access: je IPTV-app kan daar niet doorheen.
 Kies in de app voor een Xtream-account en vul in:
 
 - **Server:** `https://iptv.jouwdomein.nl`
-- **Gebruikersnaam en wachtwoord:** de gegevens uit stap 3
+- **Gebruikersnaam en wachtwoord:** de gegevens voor je app uit stap 3 (ze staan
+  ook op het tabblad Status)
 
 ## Beveiliging en privacy
 

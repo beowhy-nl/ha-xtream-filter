@@ -9,14 +9,15 @@
 @media (prefers-color-scheme:dark){:root{--bg:#111315;--card:#1c1f23;--text:#e6e8eb;--muted:#9aa3ad;--line:#2c3138;--accent:#4aa3ff;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--chip:#262b31}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:860px;margin:0 auto;padding:16px}
+main{max-width:900px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:4px 0 12px}
 h2{font-size:16px;margin:0 0 10px}
 nav{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);padding:7px 14px;border-radius:8px;cursor:pointer}
+button,select{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);padding:7px 12px;border-radius:8px}
+button{cursor:pointer}
 button:hover{border-color:var(--accent)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary,button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+button.small{padding:3px 9px;font-size:13px}
 button:disabled{opacity:.5;cursor:default}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
 label{display:block;font-size:13px;color:var(--muted);margin:10px 0 3px}
@@ -27,20 +28,27 @@ textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-he
 .check input{margin-top:4px}
 .hint{font-size:13px;color:var(--muted);margin:4px 0 0}
 .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.bar input{flex:1;min-width:160px}
+.bar input[type=text]{flex:1;min-width:160px}
 .list{max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
-.cat{display:flex;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.cat{display:flex;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line)}
 .cat:last-child{border-bottom:0}
-.cat span.name{flex:1;overflow-wrap:anywhere}
-.cat span.n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.tag{font-size:11px;background:var(--chip);border-radius:6px;padding:1px 6px;color:var(--warn)}
+.cat .name{flex:1;overflow-wrap:anywhere;cursor:pointer}
+.cat .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:40px;text-align:right}
+.cat.off .name{color:var(--muted)}
+.tag{font-size:11px;background:var(--chip);border-radius:6px;padding:1px 6px;color:var(--muted);white-space:nowrap}
+.tag.manual{color:var(--warn)}
+.rule{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
+.rule input[type=text]{flex:1;min-width:140px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:190px;overflow:auto}
+.chip{display:flex;align-items:center;gap:6px;background:var(--chip);border-radius:8px;padding:4px 6px 4px 10px;font-size:13px}
+.chip b{font-weight:600;white-space:pre}
 .msg{padding:10px 12px;border-radius:8px;margin:10px 0;border:1px solid var(--line);font-size:14px}
 .msg.ok{border-color:var(--ok);color:var(--ok)}.msg.bad{border-color:var(--bad);color:var(--bad)}.msg.warn{border-color:var(--warn);color:var(--warn)}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
 dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
 code{background:var(--chip);padding:1px 6px;border-radius:5px;font-size:13px;overflow-wrap:anywhere}
-pre{background:var(--chip);padding:10px;border-radius:8px;overflow:auto;font-size:13px;margin:8px 0 0}
-#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;display:none;max-width:90vw}
+.savebar{position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:10px;align-items:center}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;display:none;max-width:90vw;z-index:9}
 .hidden{display:none}
 </style>
 </head>
@@ -49,55 +57,69 @@ pre{background:var(--chip);padding:10px;border-radius:8px;overflow:auto;font-siz
 <h1>IPTV Filter</h1>
 <nav>
   <button data-tab="cats" class="on">Categorieën</button>
-  <button data-tab="settings">Instellingen</button>
+  <button data-tab="providers">Providers</button>
+  <button data-tab="settings">VPN en overig</button>
   <button data-tab="status">Status</button>
 </nav>
 
 <section id="tab-cats">
-  <div class="card">
-    <div class="bar">
-      <button data-kind="live" class="on">Live-tv</button>
-      <button data-kind="vod">Films</button>
-      <button data-kind="series">Series</button>
+  <div id="catmsg"></div>
+  <div id="catbody" class="hidden">
+    <div class="card" id="provpick">
+      <div class="bar" style="margin:0"><span>Provider</span><select id="provsel"></select></div>
     </div>
-    <div class="bar">
-      <input type="text" id="search" placeholder="Zoeken…">
-      <button id="all">Alles aan</button>
-      <button id="none">Alles uit</button>
+
+    <div class="card">
+      <h2>Regels op naam</h2>
+      <p class="hint" style="margin-bottom:8px">Een regel geldt ook voor categorieën die de provider later toevoegt. De bovenste regel die past, telt. Een handmatige keuze in de lijst hieronder gaat altijd voor.</p>
+      <div id="rules"></div>
+      <div class="bar" style="margin-top:10px"><button id="addrule">Regel toevoegen</button></div>
+      <div class="bar" style="margin:14px 0 0">
+        <span>Categorieën waar geen regel voor geldt (ook nieuwe):</span>
+        <select id="default_show"><option value="1">Tonen</option><option value="0">Verbergen</option></select>
+      </div>
     </div>
-    <p class="hint" id="catinfo"></p>
-    <div id="catmsg"></div>
-    <div class="list" id="list"></div>
-    <div class="bar" style="margin-top:12px">
-      <button class="primary" id="savecats">Opslaan</button>
+
+    <div class="card" id="prefixcard">
+      <h2>Gevonden voorvoegsels</h2>
+      <p class="hint" style="margin-bottom:8px">Veel providers zetten een code voor de naam. Klik op Tonen of Verbergen om er een regel van te maken.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="card">
+      <div class="bar">
+        <button data-kind="live" class="on">Live-tv</button>
+        <button data-kind="vod">Films</button>
+        <button data-kind="series">Series</button>
+      </div>
+      <div class="bar">
+        <input type="text" id="search" placeholder="Zoeken…">
+        <button id="all">Zichtbare aan</button>
+        <button id="none">Zichtbare uit</button>
+        <button id="clearman">Handmatige keuzes wissen</button>
+      </div>
+      <p class="hint" id="catinfo"></p>
+      <div class="list" id="list"></div>
+    </div>
+
+    <div class="savebar">
+      <button class="primary" id="savefilter">Opslaan</button>
       <span class="hint" id="dirty"></span>
     </div>
-    <p class="hint">Bij zoeken werken “Alles aan” en “Alles uit” alleen op de zichtbare regels.
-    Na het opslaan moet je in je IPTV-app de lijst verversen.</p>
+    <p class="hint">Na het opslaan moet je in je IPTV-app de lijst verversen.</p>
   </div>
+</section>
+
+<section id="tab-providers" class="hidden">
+  <div id="provlist"></div>
+  <div class="bar"><button id="addprov">Provider toevoegen</button></div>
+  <p class="hint">Elke provider krijgt eigen inloggegevens voor je IPTV-app. In je app voeg je elke provider toe als apart account, met steeds hetzelfde serveradres.</p>
 </section>
 
 <section id="tab-settings" class="hidden">
   <div class="card">
-    <h2>Je IPTV-provider</h2>
-    <label>Server-URL</label><input type="text" id="upstream_url" placeholder="http://voorbeeld.tv:8080" autocomplete="off">
-    <div class="row">
-      <div><label>Gebruikersnaam</label><input type="text" id="upstream_username" autocomplete="off"></div>
-      <div><label>Wachtwoord</label><input type="text" id="upstream_password" autocomplete="off"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h2>Inloggegevens voor je IPTV-app</h2>
-    <p class="hint">Deze vul je in je app in, in plaats van de gegevens van je provider. Alleen letters, cijfers, punt, streepje en underscore.</p>
-    <div class="row">
-      <div><label>Gebruikersnaam</label><input type="text" id="proxy_username" autocomplete="off"></div>
-      <div><label>Wachtwoord (minimaal 10 tekens)</label><input type="text" id="proxy_password" autocomplete="off"></div>
-    </div>
-    <div class="bar" style="margin-top:10px"><button id="genpw">Genereer wachtwoord</button></div>
-  </div>
-  <div class="card">
     <h2>VPN (WireGuard)</h2>
-    <label class="check"><input type="checkbox" id="vpn_enabled"><span>Verkeer naar de provider alleen via de VPN<br><span class="hint">Staat dit aan en werkt de VPN niet, dan gaat er niets naar de provider. Zet je dit uit, dan gaat het verkeer via je eigen IP-adres.</span></span></label>
+    <label class="check"><input type="checkbox" id="vpn_enabled"><span>Verkeer naar de providers alleen via de VPN<br><span class="hint">Staat dit aan en werkt de VPN niet, dan gaat er niets naar de providers. Zet je dit uit, dan gaat het verkeer via je eigen IP-adres.</span></span></label>
     <div id="wginfo" class="hint"></div>
     <label>WireGuard-configuratie (inhoud van het .conf-bestand)</label>
     <textarea id="wg_config" placeholder="Leeg laten om de huidige configuratie te behouden.&#10;&#10;[Interface]&#10;Address = …&#10;PrivateKey = …&#10;&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = …" spellcheck="false"></textarea>
@@ -110,18 +132,14 @@ pre{background:var(--chip);padding:10px;border-radius:8px;overflow:auto;font-siz
       <div><label>Lijsten bewaren (uren)</label><input type="number" id="cache_hours" min="1" max="168"></div>
       <div><label>User-agent naar de provider (leeg = die van je app)</label><input type="text" id="user_agent" autocomplete="off"></div>
     </div>
-    <label class="check"><input type="checkbox" id="show_new_categories"><span>Nieuwe categorieën van de provider automatisch tonen</span></label>
   </div>
-  <div class="bar"><button class="primary" id="savesettings">Instellingen opslaan</button></div>
+  <div class="bar"><button class="primary" id="savesettings">Opslaan</button></div>
 </section>
 
 <section id="tab-status" class="hidden">
   <div class="card"><h2>VPN</h2><div id="st-vpn" class="hint">Bezig met controleren…</div></div>
-  <div class="card"><h2>Account bij de provider</h2><div id="st-account" class="hint">Bezig met controleren…</div></div>
-  <div class="card"><h2>Zo stel je je IPTV-app in</h2><div id="st-app"></div></div>
-  <div class="card"><h2>Bewaarde lijsten</h2><div id="st-cache" class="hint"></div>
-    <div class="bar" style="margin-top:10px"><button id="clearcache">Lijsten opnieuw ophalen</button><button id="recheck">Status verversen</button></div>
-  </div>
+  <div id="st-provs"></div>
+  <div class="bar"><button id="clearcache">Lijsten opnieuw ophalen</button><button id="recheck">Status verversen</button></div>
 </section>
 </main>
 <div id="toast"></div>
@@ -129,7 +147,8 @@ pre{background:var(--chip);padding:10px;border-radius:8px;overflow:auto;font-siz
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let state = null, kind = 'live', cats = [], dirty = false, wgDelete = false;
+const KINDS = {live: 'Live-tv', vod: 'Films', series: 'Series'};
+let state = null, pid = null, F = null, kind = 'live', counts = {}, dirty = false, wgDelete = false;
 
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} :
@@ -141,137 +160,259 @@ async function api(path, body) {
 }
 function toast(text) {
   const t = $('toast'); t.textContent = text; t.style.display = 'block';
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.style.display = 'none', 3500);
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.style.display = 'none', 4000);
 }
+function setDirty(v) { dirty = v; $('dirty').textContent = v ? 'Nog niet opgeslagen' : ''; }
+const leave = () => !dirty || confirm('Je hebt wijzigingen die nog niet zijn opgeslagen. Toch doorgaan?');
 
 /* ---- tabbladen ---- */
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
-  ['cats', 'settings', 'status'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+  ['cats', 'providers', 'settings', 'status'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
   if (b.dataset.tab === 'status') loadStatus();
 });
 
-/* ---- categorieën ---- */
+/* ---- filter: dezelfde volgorde als op de server ---- */
+function decide(k, c) {
+  const ov = F.overrides[k][c.id];
+  if (ov !== undefined) return {on: ov, why: 'manual'};
+  const name = c.name.trim().toLowerCase();
+  for (let i = 0; i < F.rules.length; i++) {
+    const r = F.rules[i], t = r.text.trim().toLowerCase();
+    if (!t || (r.kind !== 'all' && r.kind !== k)) continue;
+    if ((r.mode === 'prefix' && name.startsWith(t)) || (r.mode === 'contains' && name.includes(t)))
+      return {on: r.action === 'show', why: 'rule', idx: i};
+  }
+  return {on: F.default_show, why: 'default'};
+}
+function prefixOf(name) {
+  const m = name.match(/^\s*[|\[({]?\s*[\p{L}\p{N}+&]{1,8}\s*[|\])}:\-–]/u);
+  return m ? m[0].trim() : null;
+}
+
+function renderRules() {
+  const sel = (cls, opts, val) => `<select class="${cls}">` + opts.map(([v, l]) =>
+    `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('') + '</select>';
+  $('rules').innerHTML = F.rules.map((r, i) => `<div class="rule" data-i="${i}">
+    <span>Naam</span>${sel('r-mode', [['prefix', 'begint met'], ['contains', 'bevat']], r.mode)}
+    <input type="text" class="r-text" value="${esc(r.text)}" placeholder="bijvoorbeeld | NL |">
+    ${sel('r-action', [['show', 'Tonen'], ['hide', 'Verbergen']], r.action)}
+    ${sel('r-kind', [['all', 'Overal'], ['live', 'Live-tv'], ['vod', 'Films'], ['series', 'Series']], r.kind)}
+    <button class="small r-up" title="Omhoog" ${i === 0 ? 'disabled' : ''}>↑</button>
+    <button class="small r-down" title="Omlaag" ${i === F.rules.length - 1 ? 'disabled' : ''}>↓</button>
+    <button class="small r-del" title="Verwijderen">✕</button></div>`).join('') ||
+    '<p class="hint">Nog geen regels.</p>';
+}
+$('rules').addEventListener('input', (e) => {
+  const row = e.target.closest('.rule'); if (!row) return;
+  const r = F.rules[+row.dataset.i];
+  r.mode = row.querySelector('.r-mode').value; r.text = row.querySelector('.r-text').value;
+  r.action = row.querySelector('.r-action').value; r.kind = row.querySelector('.r-kind').value;
+  setDirty(true); renderChips(); renderList();
+});
+$('rules').addEventListener('click', (e) => {
+  const row = e.target.closest('.rule'); if (!row || e.target.tagName !== 'BUTTON') return;
+  const i = +row.dataset.i, R = F.rules;
+  if (e.target.classList.contains('r-del')) R.splice(i, 1);
+  else if (e.target.classList.contains('r-up')) [R[i - 1], R[i]] = [R[i], R[i - 1]];
+  else if (e.target.classList.contains('r-down')) [R[i + 1], R[i]] = [R[i], R[i + 1]];
+  setDirty(true); renderRules(); renderChips(); renderList();
+});
+$('addrule').onclick = () => {
+  F.rules.push({mode: 'prefix', text: '', action: 'hide', kind: 'all'});
+  setDirty(true); renderRules();
+  const inputs = $('rules').querySelectorAll('.r-text'); inputs[inputs.length - 1].focus();
+};
+$('default_show').onchange = () => { F.default_show = $('default_show').value === '1'; setDirty(true); renderList(); };
+
+function renderChips() {
+  const found = new Map();
+  Object.keys(KINDS).forEach(k => F.categories[k].forEach(c => {
+    const p = prefixOf(c.name); if (p) found.set(p, (found.get(p) || 0) + 1);
+  }));
+  const used = new Set(F.rules.filter(r => r.mode === 'prefix').map(r => r.text.trim().toLowerCase()));
+  const rows = [...found].filter(([p, n]) => n >= 2 && !used.has(p.toLowerCase()))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 150);
+  $('prefixcard').classList.toggle('hidden', !rows.length);
+  $('chips').innerHTML = rows.map(([p, n]) => `<span class="chip" data-p="${esc(p)}"><b>${esc(p)}</b> ${n}
+    <button class="small" data-a="show">Tonen</button><button class="small" data-a="hide">Verbergen</button></span>`).join('');
+}
+$('chips').onclick = (e) => {
+  const chip = e.target.closest('.chip'); if (!chip || !e.target.dataset.a) return;
+  F.rules.push({mode: 'prefix', text: chip.dataset.p, action: e.target.dataset.a, kind: 'all'});
+  setDirty(true); renderRules(); renderChips(); renderList();
+};
+
 document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
-  if (dirty && !confirm('Je hebt wijzigingen die nog niet zijn opgeslagen. Toch wisselen?')) return;
   kind = b.dataset.kind;
   document.querySelectorAll('[data-kind]').forEach(x => x.classList.toggle('on', x === b));
-  loadCats();
+  renderList(); loadCounts();
 });
-function setDirty(v) { dirty = v; $('dirty').textContent = v ? 'Nog niet opgeslagen' : ''; }
 function visible() {
   const q = $('search').value.trim().toLowerCase();
-  return cats.filter(c => !q || c.name.toLowerCase().includes(q));
+  return F.categories[kind].filter(c => !q || c.name.toLowerCase().includes(q));
 }
-function render() {
-  const rows = visible();
-  $('list').innerHTML = rows.map(c =>
-    `<label class="cat"><input type="checkbox" data-id="${esc(c.id)}" ${c.enabled ? 'checked' : ''}>
-     <span class="name">${esc(c.name)} ${c.new ? '<span class="tag">nieuw</span>' : ''}</span>
-     <span class="n">${c.count ?? ''}</span></label>`).join('') ||
-    '<div class="cat">Geen categorieën gevonden.</div>';
-  const on = cats.filter(c => c.enabled).length;
-  $('catinfo').textContent = `${on} van ${cats.length} categorieën aan`;
+function renderList() {
+  const cnt = counts[kind] || {};
+  $('list').innerHTML = visible().map(c => {
+    const d = decide(kind, c);
+    const tag = d.why === 'manual' ? `<span class="tag manual">handmatig</span><button class="small undo" title="Weer de regels volgen">↺</button>` :
+      d.why === 'rule' ? `<span class="tag" title="${esc(F.rules[d.idx].text)}">regel</span>` : '';
+    return `<div class="cat ${d.on ? '' : 'off'}" data-id="${esc(c.id)}"><input type="checkbox" ${d.on ? 'checked' : ''}>
+      <span class="name">${esc(c.name)}</span>${tag}<span class="n">${cnt[c.id] ?? ''}</span></div>`;
+  }).join('') || '<div class="cat">Geen categorieën gevonden.</div>';
+  const all = F.categories[kind], on = all.filter(c => decide(kind, c).on).length;
+  const man = Object.keys(F.overrides[kind]).length;
+  $('catinfo').textContent = `${on} van ${all.length} categorieën zichtbaar in je app` + (man ? `, ${man} handmatig gekozen` : '');
 }
-$('list').onchange = (e) => {
-  const c = cats.find(x => x.id === e.target.dataset.id);
-  if (c) { c.enabled = e.target.checked; setDirty(true); render(); }
+$('list').onclick = (e) => {
+  const row = e.target.closest('.cat'); if (!row || !row.dataset.id) return;
+  const id = row.dataset.id, c = F.categories[kind].find(x => x.id === id);
+  if (e.target.classList.contains('undo')) delete F.overrides[kind][id];
+  else if (e.target.type === 'checkbox') F.overrides[kind][id] = e.target.checked;
+  else if (e.target.classList.contains('name')) F.overrides[kind][id] = !decide(kind, c).on;
+  else return;
+  setDirty(true); renderList();
 };
-$('search').oninput = render;
-$('all').onclick = () => { visible().forEach(c => c.enabled = true); setDirty(true); render(); };
-$('none').onclick = () => { visible().forEach(c => c.enabled = false); setDirty(true); render(); };
-async function loadCats() {
-  const mine = kind;
-  setDirty(false); cats = []; $('catmsg').innerHTML = '';
-  $('list').innerHTML = '<div class="cat">Bezig met laden…</div>'; $('catinfo').textContent = '';
-  try {
-    const data = await api('api/categories?type=' + mine);
-    if (mine !== kind) return;
-    cats = data.categories; render();
-    if (!data.configured) $('catmsg').innerHTML =
-      '<div class="msg warn">Hier is nog niets gefilterd: je app ziet nu alles. Vink uit wat je niet wilt zien en klik op Opslaan.</div>';
-    api('api/counts?type=' + mine).then(counts => {
-      if (mine !== kind) return;
-      cats.forEach(c => c.count = counts[c.id] ?? 0); render();
-    }).catch(() => {});
-  } catch (e) {
-    if (mine !== kind) return;
-    $('list').innerHTML = ''; $('catmsg').innerHTML = `<div class="msg bad">${esc(e.message)}</div>`;
-  }
+$('search').oninput = renderList;
+$('all').onclick = () => { visible().forEach(c => F.overrides[kind][c.id] = true); setDirty(true); renderList(); };
+$('none').onclick = () => { visible().forEach(c => F.overrides[kind][c.id] = false); setDirty(true); renderList(); };
+$('clearman').onclick = () => {
+  if (!confirm(`Alle handmatige keuzes bij ${KINDS[kind]} wissen? Daarna gelden alleen de regels.`)) return;
+  F.overrides[kind] = {}; setDirty(true); renderList();
+};
+function loadCounts() {
+  const p = pid, k = kind;
+  if (counts[k]) return;
+  api(`api/counts?provider=${p}&type=${k}`).then(c => { if (p === pid) { counts[k] = c; if (k === kind) renderList(); } }).catch(() => {});
 }
-$('savecats').onclick = async () => {
+async function loadFilter() {
+  const ready = state.providers.filter(p => p.upstream_ready);
+  $('provpick').classList.toggle('hidden', ready.length < 2);
+  $('provsel').innerHTML = ready.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  if (!ready.length) {
+    $('catbody').classList.add('hidden'); pid = null;
+    $('catmsg').innerHTML = '<div class="msg warn">Voeg eerst bij Providers een provider toe.</div>'; return;
+  }
+  if (!ready.some(p => p.id === pid)) pid = ready[0].id;
+  $('provsel').value = pid;
+  const mine = pid;
+  $('catbody').classList.add('hidden'); $('catmsg').innerHTML = '<p class="hint">Bezig met laden…</p>';
   try {
-    await api('api/categories', {type: kind, known: cats.map(c => c.id),
-                                 enabled: cats.filter(c => c.enabled).map(c => c.id)});
-    cats.forEach(c => c.new = false);
-    setDirty(false); $('catmsg').innerHTML = ''; render(); toast('Opgeslagen');
+    const data = await api('api/filter?provider=' + mine);
+    if (mine !== pid) return;
+    F = data; counts = {}; setDirty(false);
+    $('default_show').value = F.default_show ? '1' : '0';
+    $('catmsg').innerHTML = ''; $('catbody').classList.remove('hidden');
+    renderRules(); renderChips(); renderList(); loadCounts();
+  } catch (e) { if (mine === pid) $('catmsg').innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; }
+}
+$('provsel').onchange = () => { if (!leave()) { $('provsel').value = pid; return; } pid = $('provsel').value; loadFilter(); };
+$('savefilter').onclick = async () => {
+  try {
+    await api('api/filter', {provider: pid, default_show: F.default_show, rules: F.rules, overrides: F.overrides});
+    F.rules = F.rules.filter(r => r.text.trim());
+    setDirty(false); renderRules(); renderChips(); renderList(); toast('Opgeslagen');
   } catch (e) { toast(e.message); }
 };
 
-/* ---- instellingen ---- */
-const TEXT = ['upstream_url', 'upstream_username', 'upstream_password', 'proxy_username', 'proxy_password', 'user_agent', 'cache_hours'];
-const BOOL = ['vpn_enabled', 'show_new_categories'];
+/* ---- providers ---- */
+const PF = ['name', 'upstream_url', 'upstream_username', 'upstream_password', 'proxy_username', 'proxy_password'];
+function provCard(p) {
+  const f = (k, label, ph = '') => `<div><label>${label}</label><input type="text" data-f="${k}" value="${esc(p[k] || '')}" placeholder="${ph}" autocomplete="off"></div>`;
+  return `<div class="card prov" data-id="${p.id || ''}">
+    <h2>${p.id ? esc(p.name) : 'Nieuwe provider'}</h2>
+    <div class="row">${f('name', 'Naam (voor jezelf)')}${f('upstream_url', 'Server-URL van de provider', 'http://voorbeeld.tv:8080')}</div>
+    <div class="row">${f('upstream_username', 'Gebruikersnaam bij de provider')}${f('upstream_password', 'Wachtwoord bij de provider')}</div>
+    <p class="hint" style="margin-top:12px">Inloggegevens voor je IPTV-app (alleen letters, cijfers, punt, streepje en underscore):</p>
+    <div class="row">${f('proxy_username', 'Gebruikersnaam in je app')}${f('proxy_password', 'Wachtwoord in je app (minimaal 10 tekens)')}</div>
+    <div class="bar" style="margin:12px 0 0"><button class="primary p-save">Opslaan</button><button class="p-gen">Genereer wachtwoord</button>
+    <button class="p-del">${p.id ? 'Verwijderen' : 'Annuleren'}</button></div></div>`;
+}
+function renderProviders(extra) {
+  $('provlist').innerHTML = state.providers.map(provCard).join('') + (extra ? provCard({}) : '') ||
+    '<div class="msg warn">Er is nog geen provider. Klik op Provider toevoegen.</div>';
+}
+$('addprov').onclick = () => { if (!$('provlist').querySelector('.prov[data-id=""]')) renderProviders(true); };
+$('provlist').onclick = async (e) => {
+  const card = e.target.closest('.prov'); if (!card || e.target.tagName !== 'BUTTON') return;
+  const id = card.dataset.id;
+  try {
+    if (e.target.classList.contains('p-gen')) {
+      card.querySelector('[data-f=proxy_password]').value = (await api('api/password', {})).password;
+    } else if (e.target.classList.contains('p-del')) {
+      if (!id) return renderProviders(false);
+      if (!confirm('Deze provider en zijn filterinstellingen verwijderen?')) return;
+      state = await api('api/provider/delete', {id}); renderProviders(false); loadFilter(); toast('Provider verwijderd');
+    } else if (e.target.classList.contains('p-save')) {
+      const body = {id};
+      PF.forEach(k => body[k] = card.querySelector(`[data-f=${k}]`).value);
+      const res = await api('api/provider', body);
+      state = res; renderProviders(false); loadFilter();
+      toast(res.choices_reset ? 'Opgeslagen. Je handmatige categoriekeuzes zijn gewist, want die horen bij het vorige account. Je regels zijn bewaard.' : 'Provider opgeslagen');
+    }
+  } catch (err) { toast(err.message); }
+};
+
+/* ---- VPN en overig ---- */
 function fillSettings() {
-  TEXT.forEach(k => $(k).value = state.settings[k]);
-  BOOL.forEach(k => $(k).checked = state.settings[k]);
+  $('cache_hours').value = state.settings.cache_hours; $('user_agent').value = state.settings.user_agent;
+  $('vpn_enabled').checked = state.settings.vpn_enabled;
   $('wg_config').value = ''; wgDelete = false;
   const wg = state.wg;
   $('wginfo').innerHTML = !wg ? 'Er is nog geen WireGuard-configuratie opgeslagen.' :
     wg.error ? `<span style="color:var(--bad)">${esc(wg.error)}</span>` :
     `Opgeslagen configuratie: server <code>${esc(wg.endpoint)}</code>, adres <code>${esc(wg.address)}</code>`;
 }
-$('genpw').onclick = async () => { $('proxy_password').value = (await api('api/password', {})).password; };
 $('delwg').onclick = () => { wgDelete = true; $('wg_config').value = ''; $('wginfo').textContent = 'De configuratie wordt verwijderd zodra je opslaat.'; };
 $('savesettings').onclick = async () => {
-  const body = {};
-  TEXT.forEach(k => body[k] = $(k).value);
-  BOOL.forEach(k => body[k] = $(k).checked);
   const wg = $('wg_config').value.trim();
-  body.wg_config = wg ? wg : (wgDelete ? '' : null);
-  try { state = await api('api/settings', body); fillSettings(); toast('Instellingen opgeslagen'); loadCats(); }
-  catch (e) { toast(e.message); }
+  try {
+    state = await api('api/settings', {cache_hours: $('cache_hours').value, user_agent: $('user_agent').value,
+      vpn_enabled: $('vpn_enabled').checked, wg_config: wg ? wg : (wgDelete ? '' : null)});
+    fillSettings(); toast('Opgeslagen');
+  } catch (e) { toast(e.message); }
 };
 
 /* ---- status ---- */
 async function loadStatus() {
-  $('st-vpn').innerHTML = $('st-account').innerHTML = 'Bezig met controleren…';
-  const s = state.settings;
-  $('st-app').innerHTML = !state.proxy_ready ?
-    '<div class="msg warn">Stel eerst bij Instellingen de inloggegevens voor je app in.</div>' :
-    `<dl><dt>Server</dt><dd>het adres van je Cloudflare-subdomein, bijvoorbeeld <code>https://iptv.jouwdomein.nl</code></dd>
-     <dt>Gebruikersnaam</dt><dd><code>${esc(s.proxy_username)}</code></dd>
-     <dt>Wachtwoord</dt><dd><code>${esc(s.proxy_password)}</code></dd></dl>
-     <p class="hint">Voor Cloudflare: laat het subdomein verwijzen naar <code>http://homeassistant:${state.port}</code>
-     (of naar <code>http://${esc(state.hostname)}:${state.port}</code>).</p>`;
+  $('st-vpn').innerHTML = 'Bezig met controleren…'; $('st-provs').innerHTML = '';
   let st;
   try { st = await api('api/status'); } catch (e) { $('st-vpn').innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; return; }
   const v = st.vpn, ip = (x) => x && x.ok ? `<code>${esc(x.ip)}</code>${x.country ? ' (' + esc(x.country) + ')' : ''}` : '<em>onbekend</em>';
   let html;
-  if (!v.enabled) html = '<div class="msg bad">De VPN staat uit. Verkeer naar de provider gaat via je eigen IP-adres.</div>';
-  else if (!v.configured) html = `<div class="msg bad">Er is geen geldige WireGuard-configuratie. Er gaat niets naar de provider.${v.error ? ' ' + esc(v.error) : ''}</div>`;
-  else if (v.safe) html = '<div class="msg ok">De VPN werkt. Verkeer naar de provider gaat via de VPN.</div>';
-  else html = `<div class="msg bad">De VPN-verbinding werkt niet. Er gaat niets naar de provider.${v.error ? ' ' + esc(v.error) : ''}</div>`;
+  if (!v.enabled) html = '<div class="msg bad">De VPN staat uit. Verkeer naar de providers gaat via je eigen IP-adres.</div>';
+  else if (!v.configured) html = `<div class="msg bad">Er is geen geldige WireGuard-configuratie. Er gaat niets naar de providers.${v.error ? ' ' + esc(v.error) : ''}</div>`;
+  else if (v.safe) html = '<div class="msg ok">De VPN werkt. Verkeer naar de providers gaat via de VPN.</div>';
+  else html = `<div class="msg bad">De VPN-verbinding werkt niet. Er gaat niets naar de providers.${v.error ? ' ' + esc(v.error) : ''}</div>`;
   html += `<dl><dt>Je eigen IP-adres</dt><dd>${ip(v.home)}</dd>`;
   if (v.enabled) html += `<dt>IP-adres via de VPN</dt><dd>${ip(v.tunnel)}</dd><dt>VPN-server</dt><dd>${esc(v.endpoint) || '-'}</dd>`;
   $('st-vpn').innerHTML = html + '</dl>';
-  const a = st.account;
-  $('st-account').innerHTML = !a ? '<div class="msg warn">De gegevens van de provider zijn nog niet ingevuld.</div>' :
-    !a.ok ? `<div class="msg bad">${esc(a.error)}</div>` :
-    `<div class="msg ok">Inloggen bij de provider is gelukt.</div><dl>
-     <dt>Status</dt><dd>${esc(a.status ?? '-')}</dd><dt>Geldig tot</dt><dd>${esc(a.expires ?? 'onbekend')}</dd>
-     <dt>Verbindingen</dt><dd>${esc(a.active_connections ?? '?')} van ${esc(a.max_connections ?? '?')} in gebruik</dd></dl>`;
-  $('st-cache').innerHTML = st.cache.length ? '<dl>' + st.cache.map(c =>
-    `<dt>${esc(c.name)}</dt><dd>${(c.size / 1048576).toFixed(1)} MB, ${c.age_minutes} min oud</dd>`).join('') + '</dl>' :
-    'Er zijn nog geen lijsten opgehaald.';
+  $('st-provs').innerHTML = st.providers.map(sp => {
+    const p = state.providers.find(x => x.id === sp.id) || {}, a = sp.account;
+    const acc = !a ? '<div class="msg warn">De gegevens van de provider zijn nog niet compleet.</div>' :
+      !a.ok ? `<div class="msg bad">${esc(a.error)}</div>` :
+      `<div class="msg ok">Inloggen bij de provider is gelukt.</div><dl>
+       <dt>Status</dt><dd>${esc(a.status ?? '-')}</dd><dt>Geldig tot</dt><dd>${esc(a.expires ?? 'onbekend')}</dd>
+       <dt>Verbindingen</dt><dd>${esc(a.active_connections ?? '?')} van ${esc(a.max_connections ?? '?')} in gebruik</dd></dl>`;
+    const app = !p.proxy_ready ? '<div class="msg warn">Stel bij Providers de inloggegevens voor je app in.</div>' :
+      `<dl><dt>Server</dt><dd>je Cloudflare-subdomein, bijvoorbeeld <code>https://iptv.jouwdomein.nl</code></dd>
+       <dt>Gebruikersnaam</dt><dd><code>${esc(p.proxy_username)}</code></dd><dt>Wachtwoord</dt><dd><code>${esc(p.proxy_password)}</code></dd></dl>`;
+    const cache = sp.cache.length ? '<dl>' + sp.cache.map(c =>
+      `<dt>${esc(c.name)}</dt><dd>${(c.size / 1048576).toFixed(1)} MB, ${c.age_minutes} min oud</dd>`).join('') + '</dl>' :
+      '<p class="hint">Er zijn nog geen lijsten opgehaald.</p>';
+    return `<div class="card"><h2>${esc(sp.name)}</h2>${acc}
+      <h2 style="margin-top:16px">Zo stel je je IPTV-app in</h2>${app}
+      <h2 style="margin-top:16px">Bewaarde lijsten</h2>${cache}</div>`;
+  }).join('') + `<p class="hint" style="margin-bottom:12px">Voor Cloudflare: laat het subdomein verwijzen naar <code>http://homeassistant:${state.port}</code>
+    (of naar <code>http://${esc(state.hostname)}:${state.port}</code>).</p>`;
 }
 $('recheck').onclick = loadStatus;
 $('clearcache').onclick = async () => { await api('api/cache/clear', {}); toast('De lijsten worden bij het volgende verzoek opnieuw opgehaald'); loadStatus(); };
 
 (async () => {
   try { state = await api('api/state'); } catch (e) { toast(e.message); return; }
-  fillSettings();
-  if (state.upstream_ready) loadCats();
-  else { $('list').innerHTML = ''; $('catmsg').innerHTML = '<div class="msg warn">Vul eerst bij Instellingen de gegevens van je provider in.</div>'; }
+  fillSettings(); renderProviders(false); loadFilter();
 })();
 </script>
 </body>

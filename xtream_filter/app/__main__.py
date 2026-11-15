@@ -11,7 +11,7 @@ from pathlib import Path
 from aiohttp import web
 
 from .admin import PUBLIC_PORT, AdminApi
-from .catalog import Catalog
+from .catalog import Catalogs
 from .public import PublicApi
 from .settings import Settings
 from .upstream import Upstream
@@ -38,9 +38,9 @@ async def main() -> None:
     vpn = Vpn(Path(os.environ.get("XF_RUN_DIR", "/run/xtream_filter")))
     await vpn.apply(settings["wg_config"], settings["vpn_enabled"])
     upstream = Upstream(settings, vpn)
-    catalog = Catalog(settings, upstream)
-    public = PublicApi(settings, upstream, catalog)
-    admin = AdminApi(settings, vpn, upstream, catalog, public)
+    catalogs = Catalogs(settings, upstream)
+    public = PublicApi(settings, upstream, catalogs)
+    admin = AdminApi(settings, vpn, upstream, catalogs, public)
 
     runners = []
     for app, port in ((public.build(), int(os.environ.get("XF_PUBLIC_PORT", PUBLIC_PORT))),

@@ -9,7 +9,7 @@ from pathlib import Path
 import aiohttp
 from aiohttp_socks import ProxyConnector
 
-from .settings import Settings
+from .settings import Settings, provider_ready
 from .vpn import SOCKS_URL, Vpn
 
 log = logging.getLogger("xf.upstream")
@@ -42,8 +42,8 @@ class Upstream:
             self._sessions[via_vpn] = sess
         return sess
 
-    def _provider_session(self) -> aiohttp.ClientSession:
-        if not self.settings.upstream_ready():
+    def _provider_session(self, prov: dict) -> aiohttp.ClientSession:
+        if not provider_ready(prov):
             raise UpstreamError("De gegevens van de provider zijn nog niet ingevuld.")
         if self.settings["vpn_enabled"]:
             if not self.vpn.configured:
@@ -63,9 +63,10 @@ class Upstream:
                 or self.last_client_ua or DEFAULT_UA,
                 "Accept": "*/*"}
 
-    def _creds(self) -> dict:
-        return {"username": self.settings["upstream_username"],
-                "password": self.settings["upstream_password"]}
+    @staticmethod
+    def _creds(prov: dict) -> dict:
+        return {"username": prov["upstream_username"],
+                "password": prov["upstream_password"]}
 
     @staticmethod
     def _wrap(exc: Exception) -> UpstreamError:
@@ -74,12 +75,12 @@ class Upstream:
         # Bewust alleen het type fout: de tekst kan een URL met inloggegevens bevatten.
         return UpstreamError(f"De provider is niet bereikbaar ({type(exc).__name__}).")
 
-    async def api(self, params: dict, ua: str | None = None, php: str = "player_api.php",
-                  timeout: int = 120) -> tuple[int, str, bytes]:
-        sess = self._provider_session()
-        url = f"{self.settings['upstream_url']}/{php}"
+    async def api(self, prov: dict, params: dict, ua: str | None = None,
+                  php: str = "player_api.php", timeout: int = 120) -> tuple[int, str, bytes]:
+        sess = self._provider_session(prov)
+        url = f"{prov['upstream_url']}/{php}"
         try:
-            async with sess.get(url, params={**params, **self._creds()},
+            async with sess.get(url, params={**params, **self._creds(prov)},
                                 headers=self._headers(ua),
                                 timeout=aiohttp.ClientTimeout(total=timeout, connect=30)) as resp:
                 body = await resp.read()
@@ -89,13 +90,14 @@ class Upstream:
         except Exception as exc:  # noqa: BLE001
             raise self._wrap(exc) from None
 
-    async def download(self, php: str, params: dict, dest: Path, ua: str | None = None) -> None:
+    async def download(self, prov: dict, php: str, params: dict, dest: Path,
+                       ua: str | None = None) -> None:
         """Download een (grote) lijst naar schijf."""
-        sess = self._provider_session()
-        url = f"{self.settings['upstream_url']}/{php}"
+        sess = self._provider_session(prov)
+        url = f"{prov['upstream_url']}/{php}"
         tmp = dest.with_name(dest.name + ".part")
         try:
-            async with sess.get(url, params={**params, **self._creds()},
+            async with sess.get(url, params={**params, **self._creds(prov)},
                                 headers=self._headers(ua),
                                 timeout=aiohttp.ClientTimeout(total=900, connect=30)) as resp:
                 if resp.status != 200:

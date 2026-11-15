@@ -6,7 +6,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from app.admin import AdminApi
-from app.catalog import Catalog
+from app.catalog import Catalogs
 from app.public import MAX_FAILURES, PublicApi
 from app.settings import Settings, SettingsError, normalize_upstream_url
 from app.upstream import Upstream
@@ -101,14 +101,16 @@ async def env(tmp_path, monkeypatch):
     base = f"http://127.0.0.1:{mserver.port}"
 
     settings = Settings(tmp_path)
-    settings.update({"upstream_url": base + "/player_api.php", "upstream_username": UP_USER,
-                     "upstream_password": UP_PASS, "proxy_username": PX_USER,
-                     "proxy_password": PX_PASS, "vpn_enabled": False})
+    settings.update({"vpn_enabled": False})
+    prov, _ = settings.save_provider(None, {
+        "name": "Eerste", "upstream_url": base + "/player_api.php",
+        "upstream_username": UP_USER, "upstream_password": UP_PASS,
+        "proxy_username": PX_USER, "proxy_password": PX_PASS})
     vpn = Vpn(tmp_path / "run", binary="bestaat-niet")
     upstream = Upstream(settings, vpn)
-    catalog = Catalog(settings, upstream)
-    public = PublicApi(settings, upstream, catalog)
-    admin = AdminApi(settings, vpn, upstream, catalog, public)
+    catalogs = Catalogs(settings, upstream)
+    public = PublicApi(settings, upstream, catalogs)
+    admin = AdminApi(settings, vpn, upstream, catalogs, public)
     pub = TestClient(TestServer(public.build()))
     adm = TestClient(TestServer(admin.build()))
     await pub.start_server()
@@ -118,7 +120,7 @@ async def env(tmp_path, monkeypatch):
         pass
     e = Env()
     e.mock, e.base, e.settings, e.vpn, e.upstream = mock, base, settings, vpn, upstream
-    e.pub, e.adm, e.catalog = pub, adm, catalog
+    e.pub, e.adm, e.catalogs, e.pid = pub, adm, catalogs, prov["id"]
     yield e
     await pub.close()
     await adm.close()
@@ -169,9 +171,8 @@ async def test_unfiltered_by_default(env):
 
 
 async def test_filtering(env):
-    env.settings.set_filter("live", enabled=["1"], known=["1", "2", "3"])
-    env.settings.set_filter("vod", enabled=["10"], known=["10", "11"])
-    env.settings.set_filter("series", enabled=[], known=["20", "21"])
+    env.settings.set_filter(env.pid, default_show=False, overrides={
+        "live": {"1": True}, "vod": {"10": True}, "series": {}})
 
     cats = await get_json(env.pub, action="get_live_categories")
     assert [c["category_id"] for c in cats] == ["1"]
@@ -203,14 +204,103 @@ async def test_lists_are_cached(env):
     assert actions.count("get_live_categories") == 1
 
 
-async def test_new_category_policy(env):
-    env.settings.set_filter("live", enabled=["1"], known=["1", "2"])  # 3 is 'nieuw'
-    cats = await get_json(env.pub, action="get_live_categories")
-    assert [c["category_id"] for c in cats] == ["1"]
-    env.settings.update({"show_new_categories": True})
-    env.catalog.invalidate_filtered()
-    cats = await get_json(env.pub, action="get_live_categories")
-    assert [c["category_id"] for c in cats] == ["1", "3"]
+def rule(text, action="hide", mode="prefix", kind="all"):
+    return {"mode": mode, "text": text, "action": action, "kind": kind}
+
+
+async def live_ids(env, auth=None):
+    resp = await env.pub.get("/player_api.php",
+                             params={**(auth or AUTH), "action": "get_live_categories"})
+    return [c["category_id"] for c in json.loads(await resp.text())]
+
+
+async def test_name_rules(env):
+    # Standaard tonen, alles wat met "ar" begint verbergen (hoofdletters maken niet uit).
+    env.settings.set_filter(env.pid, default_show=True, rules=[rule("AR")])
+    assert await live_ids(env) == ["1", "2"]
+    streams = await get_json(env.pub, action="get_live_streams")
+    # 103 valt weg; 104 hoort ook bij categorie 1 en blijft.
+    assert [s["stream_id"] for s in streams] == [101, 102, 104]
+
+    # Een handmatige keuze gaat voor op de regel.
+    env.settings.set_filter(env.pid, overrides={"live": {"3": True, "2": False}})
+    env.catalogs.get(env.pid).invalidate_filtered()
+    assert await live_ids(env) == ["1", "3"]
+
+    # Andersom: standaard verbergen, alleen tonen wat aan een regel voldoet.
+    env.settings.set_filter(env.pid, default_show=False, overrides={},
+                            rules=[rule("nl", "show"), rule("por", "show", "contains")])
+    env.catalogs.get(env.pid).invalidate_filtered()
+    assert await live_ids(env) == ["1", "2"]
+
+    # De bovenste regel die past, telt.
+    env.settings.set_filter(env.pid, default_show=True,
+                            rules=[rule("sp", "show"), rule("s", "hide")])
+    assert await live_ids(env) == ["1", "2", "3"]
+    env.settings.set_filter(env.pid, rules=[rule("s", "hide"), rule("sp", "show")])
+    assert await live_ids(env) == ["1", "3"]
+
+
+async def test_rule_scope_and_new_categories(env):
+    # Een regel alleen voor films raakt live-tv niet.
+    env.settings.set_filter(env.pid, default_show=True, rules=[rule("films xx", kind="vod")])
+    assert await live_ids(env) == ["1", "2", "3"]
+    vod = await get_json(env.pub, action="get_vod_categories")
+    assert [c["category_id"] for c in vod] == ["10"]
+    assert [s["stream_id"] for s in await get_json(env.pub, action="get_vod_streams")] == [501]
+
+    # De provider voegt categorieën toe: ze volgen de regels, anders de standaard.
+    CATS["vod"].append({"category_id": "12", "category_name": "Films XX nieuw", "parent_id": 0})
+    CATS["vod"].append({"category_id": "13", "category_name": "Docu", "parent_id": 0})
+    try:
+        env.catalogs.get(env.pid).clear()
+        vod = await get_json(env.pub, action="get_vod_categories")
+        assert [c["category_id"] for c in vod] == ["10", "13"]
+    finally:
+        del CATS["vod"][2:]
+
+
+async def test_multiple_providers(env):
+    second = {"username": "tweede", "password": "ander-wachtwoord2"}
+    with pytest.raises(SettingsError):  # gebruikersnaam voor de app moet uniek zijn
+        env.settings.save_provider(None, {"proxy_username": PX_USER,
+                                          "proxy_password": "ander-wachtwoord2"})
+    prov2, _ = env.settings.save_provider(None, {
+        "name": "Tweede", "upstream_url": env.base, "upstream_username": UP_USER,
+        "upstream_password": UP_PASS, "proxy_username": second["username"],
+        "proxy_password": second["password"]})
+    env.settings.set_filter(env.pid, rules=[rule("ar")])
+    env.settings.set_filter(prov2["id"], default_show=False, overrides={"live": {"3": True}})
+
+    assert await live_ids(env) == ["1", "2"]
+    assert await live_ids(env, second) == ["3"]
+    resp = await env.pub.get("/player_api.php", params=second)
+    assert (await resp.json())["user_info"]["username"] == "tweede"
+    resp = await env.pub.get("/live/tweede/ander-wachtwoord2/5.ts", allow_redirects=False)
+    assert resp.headers["Location"] == f"{env.base}/live/{UP_USER}/{UP_PASS}/5.ts"
+    # Gegevens van de ene provider werken niet met het wachtwoord van de andere.
+    resp = await env.pub.get(f"/live/tweede/{PX_PASS}/5.ts", allow_redirects=False)
+    assert resp.status == 403
+
+    # Ander account bij de provider: handmatige keuzes weg, regels blijven.
+    env.settings.set_filter(env.pid, overrides={"live": {"2": False}})
+    _, changed = env.settings.save_provider(env.pid, {"upstream_username": "nieuw"})
+    prov = env.settings.provider(env.pid)
+    assert "overrides" in changed and prov["overrides"]["live"] == {}
+    assert prov["rules"] == [rule("ar")]
+
+    env.settings.delete_provider(prov2["id"])
+    resp = await env.pub.get("/player_api.php", params=second)
+    assert (await resp.json()) == {"user_info": {"auth": 0}}
+
+
+async def test_settings_survive_restart(env):
+    env.settings.set_filter(env.pid, default_show=False, rules=[rule("| NL |", "show")],
+                            overrides={"live": {"7": True}})
+    again = Settings(env.settings.data_dir)
+    prov = again.provider(env.pid)
+    assert prov["default_show"] is False and prov["rules"] == [rule("| NL |", "show")]
+    assert prov["overrides"]["live"] == {"7": True} and prov["proxy_username"] == PX_USER
 
 
 async def test_passthrough_uses_provider_credentials(env):
@@ -221,7 +311,7 @@ async def test_passthrough_uses_provider_credentials(env):
 
 
 async def test_epg_is_filtered(env):
-    env.settings.set_filter("live", enabled=["1"], known=["1", "2", "3"])
+    env.settings.set_filter(env.pid, default_show=False, overrides={"live": {"1": True}})
     resp = await env.pub.get("/xmltv.php", params=AUTH)
     text = await resp.text()
     assert resp.status == 200
@@ -308,40 +398,61 @@ async def test_wireguard_config():
 
 async def test_admin_flow(env):
     state = await (await env.adm.get("/api/state")).json()
-    assert state["upstream_ready"] and state["proxy_ready"]
-    assert "wg_config" not in state["settings"]
+    assert state["providers"][0]["upstream_ready"] and state["providers"][0]["proxy_ready"]
+    assert "wg_config" not in json.dumps(state)
 
-    cats = await (await env.adm.get("/api/categories?type=live")).json()
-    assert cats["configured"] is False and len(cats["categories"]) == 3
-    counts = await (await env.adm.get("/api/counts?type=live")).json()
+    flt = await (await env.adm.get(f"/api/filter?provider={env.pid}")).json()
+    assert flt["default_show"] is True and flt["rules"] == []
+    assert [c["name"] for c in flt["categories"]["live"]] == ["NL", "Sport", "Arabic"]
+    counts = await (await env.adm.get(f"/api/counts?provider={env.pid}&type=live")).json()
     assert counts == {"1": 1, "2": 1, "3": 2}
 
-    resp = await env.adm.post("/api/categories", json={
-        "type": "live", "enabled": ["2"], "known": ["1", "2", "3"]})
+    resp = await env.adm.post("/api/filter", json={
+        "provider": env.pid, "default_show": True, "rules": [rule("ar"), rule("  ")],
+        "overrides": {"live": {"1": False}, "vod": {}, "series": {}}})
     assert resp.status == 200
+    assert env.settings.provider(env.pid)["rules"] == [rule("ar")]  # lege regel valt weg
     streams = await get_json(env.pub, action="get_live_streams")
     assert [s["stream_id"] for s in streams] == [102]
 
+    resp = await env.adm.post("/api/filter", json={
+        "provider": env.pid, "rules": [{"mode": "regex", "text": "x", "action": "hide",
+                                        "kind": "all"}]})
+    assert resp.status == 400
+
+    # Tweede provider via de beheerpagina, en weer verwijderen.
+    resp = await env.adm.post("/api/provider", json={
+        "name": "Extra", "upstream_url": env.base, "upstream_username": UP_USER,
+        "upstream_password": UP_PASS, "proxy_username": "extra",
+        "proxy_password": "kort"})
+    assert resp.status == 400
+    resp = await env.adm.post("/api/provider", json={
+        "name": "Extra", "upstream_url": env.base, "upstream_username": UP_USER,
+        "upstream_password": UP_PASS, "proxy_username": "extra",
+        "proxy_password": "lang-genoeg-123"})
+    data = await resp.json()
+    assert len(data["providers"]) == 2
+    state = await (await env.adm.post("/api/provider/delete",
+                                      json={"id": data["saved_id"]})).json()
+    assert len(state["providers"]) == 1
+
     # WireGuard-sleutel opslaan en daarna niet meer teruggeven.
-    resp = await env.adm.post("/api/settings", json={"wg_config": WG})
-    state = await resp.json()
+    state = await (await env.adm.post("/api/settings", json={"wg_config": WG})).json()
     assert state["wg"]["endpoint"] == "nl-ams.prod.surfshark.com:51820"
     assert "YFAbmZz" not in json.dumps(state)
     # Leeg laten (null) behoudt de configuratie.
     state = await (await env.adm.post("/api/settings", json={"wg_config": None})).json()
     assert state["wg"] is not None
 
-    resp = await env.adm.post("/api/settings", json={"proxy_password": "kort"})
-    assert resp.status == 400
-
     status = await (await env.adm.get("/api/status")).json()
-    assert status["account"]["ok"] is True and status["account"]["status"] == "Active"
+    account = status["providers"][0]["account"]
+    assert account["ok"] is True and account["status"] == "Active"
 
 
 async def test_admin_refuses_non_ingress(env, monkeypatch):
     env.adm.app  # noqa: B018
     from app import admin as admin_mod
-    api = admin_mod.AdminApi(env.settings, env.vpn, env.upstream, env.catalog, None)
+    api = admin_mod.AdminApi(env.settings, env.vpn, env.upstream, env.catalogs, None)
     api.open = False
     client = TestClient(TestServer(api.build()))
     await client.start_server()

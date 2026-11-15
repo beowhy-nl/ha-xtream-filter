@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 
-from .settings import TYPES, Settings
+from .settings import TYPES, Settings, decide, filters_active
 from .upstream import Upstream, UpstreamError
 
 log = logging.getLogger("xf.catalog")
@@ -140,13 +140,20 @@ def _xml_attr(value: str) -> str:
 
 
 class Catalog:
-    def __init__(self, settings: Settings, upstream: Upstream):
+    """De lijsten van één provider."""
+
+    def __init__(self, settings: Settings, upstream: Upstream, pid: str):
         self.settings = settings
         self.upstream = upstream
-        self.dir = settings.data_dir / "cache"
+        self.pid = pid
+        self.dir = settings.data_dir / "cache" / pid
         self.dir.mkdir(parents=True, exist_ok=True)
         self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._mem: dict[str, tuple[float, tuple]] = {}
+
+    @property
+    def prov(self) -> dict:
+        return self.settings.provider(self.pid)
 
     # ---- hulpfuncties -------------------------------------------------
 
@@ -161,9 +168,10 @@ class Catalog:
             path.unlink(missing_ok=True)
 
     def clear(self) -> None:
-        for path in self.dir.iterdir():
-            if path.is_file():
-                path.unlink(missing_ok=True)
+        if self.dir.exists():
+            for path in self.dir.iterdir():
+                if path.is_file():
+                    path.unlink(missing_ok=True)
         self._mem.clear()
 
     def info(self) -> list[dict]:
@@ -183,13 +191,11 @@ class Catalog:
                 return path
             new = path.with_name(path.name + ".new")
             try:
-                await self.upstream.download(php, params, new, ua)
+                await self.upstream.download(self.prov, php, params, new, ua)
                 if is_json and not looks_like_array(new):
                     new.unlink(missing_ok=True)
                     raise UpstreamError("De provider gaf een onverwacht antwoord.")
                 os.replace(new, path)
-                for derived in self.dir.glob(f"{name}.filtered.*"):
-                    derived.unlink(missing_ok=True)
                 (self.dir / f"{name}.counts.json").unlink(missing_ok=True)
                 log.info("Lijst '%s' opnieuw opgehaald", name)
             except UpstreamError as exc:
@@ -201,15 +207,33 @@ class Catalog:
 
     # ---- categorieën --------------------------------------------------
 
-    async def categories(self, kind: str, ua: str | None = None) -> list[dict]:
+    async def _categories_raw(self, kind: str, ua: str | None) -> Path:
         action = ACTIONS[kind]["categories"]
-        path = await self._raw(action, "player_api.php", {"action": action}, ua)
+        return await self._raw(action, "player_api.php", {"action": action}, ua)
+
+    async def categories(self, kind: str, ua: str | None = None) -> list[dict]:
+        path = await self._categories_raw(kind, ua)
         data = json.loads(path.read_text(**_ENC))
         return [c for c in data if isinstance(c, dict)]
 
     async def categories_filtered(self, kind: str, ua: str | None = None) -> list[dict]:
-        allowed = self.settings.allowed_fn(kind)
-        return [c for c in await self.categories(kind, ua) if allowed(c.get("category_id"))]
+        prov = self.prov
+        return [c for c in await self.categories(kind, ua)
+                if decide(prov, kind, c.get("category_id"), c.get("category_name"))[0]]
+
+    async def allowed_fn(self, kind: str, ua: str | None = None):
+        """Functie category_id -> bool, op basis van regels, keuzes en standaard."""
+        prov = self.prov
+        known = {str(c.get("category_id")):
+                 decide(prov, kind, c.get("category_id"), c.get("category_name"))[0]
+                 for c in await self.categories(kind, ua)}
+
+        def allowed(cid) -> bool:
+            cid = str(cid)
+            if cid in known:
+                return known[cid]
+            return decide(prov, kind, cid, "")[0]
+        return allowed
 
     # ---- kanalen, films en series -------------------------------------
 
@@ -217,15 +241,17 @@ class Catalog:
         """Pad naar de (gefilterde) volledige lijst van dit type."""
         action = ACTIONS[kind]["streams"]
         raw = await self._raw(action, "player_api.php", {"action": action}, ua)
-        if self.settings.filters_all(kind):
+        if not filters_active(self.prov, kind):
             return raw
+        cats = await self._categories_raw(kind, ua)
         filtered = self.dir / f"{action}.filtered.json"
         async with self._locks[action + ":filter"]:
-            if filtered.exists() and filtered.stat().st_mtime >= raw.stat().st_mtime:
+            newest = max(raw.stat().st_mtime, cats.stat().st_mtime)
+            if filtered.exists() and filtered.stat().st_mtime >= newest:
                 return filtered
+            allowed = await self.allowed_fn(kind, ua)
             try:
-                counts = await asyncio.to_thread(
-                    filter_array_file, raw, filtered, self.settings.allowed_fn(kind))
+                counts = await asyncio.to_thread(filter_array_file, raw, filtered, allowed)
             except ValueError:
                 raw.unlink(missing_ok=True)
                 raise UpstreamError("De lijst van de provider was onvolledig; probeer opnieuw.")
@@ -250,14 +276,14 @@ class Catalog:
     async def streams_for_category(self, kind: str, category_id: str,
                                    ua: str | None = None) -> tuple[int, str, bytes]:
         """Eén categorie opvragen: klein, dus rechtstreeks bij de provider (kort bewaard)."""
-        if not self.settings.allowed_fn(kind)(category_id):
+        if not (await self.allowed_fn(kind, ua))(category_id):
             return 200, "application/json", b"[]"
         key = f"{kind}:{category_id}"
         hit = self._mem.get(key)
         if hit and time.time() - hit[0] < 300:
             return hit[1]
         result = await self.upstream.api(
-            {"action": ACTIONS[kind]["streams"], "category_id": category_id}, ua)
+            self.prov, {"action": ACTIONS[kind]["streams"], "category_id": category_id}, ua)
         if result[0] == 200:
             if len(self._mem) > 200:
                 self._mem.clear()
@@ -268,7 +294,7 @@ class Catalog:
 
     async def epg_file(self, ua: str | None = None) -> Path:
         raw = await self._raw("xmltv", "xmltv.php", {}, ua, is_json=False)
-        if self.settings.filters_all("live"):
+        if not filters_active(self.prov, "live"):
             return raw
         streams = await self.streams_file("live", ua)
         filtered = self.dir / "xmltv.filtered.xml"
@@ -288,4 +314,31 @@ class Catalog:
         return filtered
 
 
-__all__ = ["Catalog", "ACTIONS", "CATEGORY_ACTIONS", "STREAM_ACTIONS", "TYPES"]
+class Catalogs:
+    """Eén Catalog per provider."""
+
+    def __init__(self, settings: Settings, upstream: Upstream):
+        self.settings = settings
+        self.upstream = upstream
+        self._items: dict[str, Catalog] = {}
+
+    def get(self, pid: str) -> Catalog:
+        self.settings.provider(pid)  # bestaat hij nog?
+        if pid not in self._items:
+            self._items[pid] = Catalog(self.settings, self.upstream, pid)
+        return self._items[pid]
+
+    def drop(self, pid: str) -> None:
+        cat = self._items.pop(pid, None) or Catalog(self.settings, self.upstream, pid)
+        cat.clear()
+        try:
+            cat.dir.rmdir()
+        except OSError:
+            pass
+
+    def clear_all(self) -> None:
+        for prov in self.settings.providers:
+            self.get(prov["id"]).clear()
+
+
+__all__ = ["Catalog", "Catalogs", "ACTIONS", "CATEGORY_ACTIONS", "STREAM_ACTIONS", "TYPES"]
