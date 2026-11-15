@@ -85,6 +85,11 @@ additional_hosts:
     service: http://homeassistant:8899
 ```
 
+`homeassistant` is hier de vaste interne naam waaronder add-ons Home Assistant
+bereiken. Het is niet de hostnaam die je bij *Instellingen → Systeem → Netwerk*
+kunt aanpassen. Je kunt ook de interne naam van de add-on zelf gebruiken; die
+staat onderaan het tabblad Status.
+
 Beheer je de tunnel in het Cloudflare-dashboard, voeg het daar dan toe als
 *Public Hostname* met hetzelfde doel.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Het tabblad Categorieën laadt opnieuw nadat je de VPN-instellingen hebt
+  opgeslagen; een oude foutmelding bleef daar staan.
+- Duidelijker uitleg over het interne adres voor Cloudflare.
+
 ## 0.2.0
 
 - Meerdere providers, elk met eigen filter en eigen inloggegevens voor de app.

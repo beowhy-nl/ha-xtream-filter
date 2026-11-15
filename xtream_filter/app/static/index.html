@@ -170,6 +170,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
   ['cats', 'providers', 'settings', 'status'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
   if (b.dataset.tab === 'status') loadStatus();
+  if (b.dataset.tab === 'cats' && !dirty && $('catbody').classList.contains('hidden')) loadFilter();
 });
 
 /* ---- filter: dezelfde volgorde als op de server ---- */
@@ -370,7 +371,7 @@ $('savesettings').onclick = async () => {
   try {
     state = await api('api/settings', {cache_hours: $('cache_hours').value, user_agent: $('user_agent').value,
       vpn_enabled: $('vpn_enabled').checked, wg_config: wg ? wg : (wgDelete ? '' : null)});
-    fillSettings(); toast('Opgeslagen');
+    fillSettings(); toast('Opgeslagen'); if (!dirty) loadFilter();
   } catch (e) { toast(e.message); }
 };
 
@@ -404,8 +405,9 @@ async function loadStatus() {
     return `<div class="card"><h2>${esc(sp.name)}</h2>${acc}
       <h2 style="margin-top:16px">Zo stel je je IPTV-app in</h2>${app}
       <h2 style="margin-top:16px">Bewaarde lijsten</h2>${cache}</div>`;
-  }).join('') + `<p class="hint" style="margin-bottom:12px">Voor Cloudflare: laat het subdomein verwijzen naar <code>http://homeassistant:${state.port}</code>
-    (of naar <code>http://${esc(state.hostname)}:${state.port}</code>).</p>`;
+  }).join('') + `<p class="hint" style="margin-bottom:12px">Voor Cloudflare: laat het subdomein verwijzen naar <code>http://homeassistant:${state.port}</code>.
+    Dat is de vaste interne naam binnen Home Assistant, niet de hostnaam uit je netwerkinstellingen.
+    Het kan ook via de naam van deze add-on: <code>http://${esc(state.hostname)}:${state.port}</code>.</p>`;
 }
 $('recheck').onclick = loadStatus;
 $('clearcache').onclick = async () => { await api('api/cache/clear', {}); toast('De lijsten worden bij het volgende verzoek opnieuw opgehaald'); loadStatus(); };
