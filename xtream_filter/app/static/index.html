@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPTV Filter</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#1c1e21;--muted:#6b7280;--line:#e2e5ea;--accent:#0b74de;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--chip:#eef2f7}
+@media (prefers-color-scheme:dark){:root{--bg:#111315;--card:#1c1f23;--text:#e6e8eb;--muted:#9aa3ad;--line:#2c3138;--accent:#4aa3ff;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--chip:#262b31}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 12px}
+h2{font-size:16px;margin:0 0 10px}
+nav{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);padding:7px 14px;border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 3px}
+input[type=text],input[type=number],textarea{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-height:130px}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:200px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:10px 0;color:var(--text);font-size:15px}
+.check input{margin-top:4px}
+.hint{font-size:13px;color:var(--muted);margin:4px 0 0}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.bar input{flex:1;min-width:160px}
+.list{max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.cat{display:flex;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.cat:last-child{border-bottom:0}
+.cat span.name{flex:1;overflow-wrap:anywhere}
+.cat span.n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tag{font-size:11px;background:var(--chip);border-radius:6px;padding:1px 6px;color:var(--warn)}
+.msg{padding:10px 12px;border-radius:8px;margin:10px 0;border:1px solid var(--line);font-size:14px}
+.msg.ok{border-color:var(--ok);color:var(--ok)}.msg.bad{border-color:var(--bad);color:var(--bad)}.msg.warn{border-color:var(--warn);color:var(--warn)}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+code{background:var(--chip);padding:1px 6px;border-radius:5px;font-size:13px;overflow-wrap:anywhere}
+pre{background:var(--chip);padding:10px;border-radius:8px;overflow:auto;font-size:13px;margin:8px 0 0}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;display:none;max-width:90vw}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>IPTV Filter</h1>
+<nav>
+  <button data-tab="cats" class="on">Categorieën</button>
+  <button data-tab="settings">Instellingen</button>
+  <button data-tab="status">Status</button>
+</nav>
+
+<section id="tab-cats">
+  <div class="card">
+    <div class="bar">
+      <button data-kind="live" class="on">Live-tv</button>
+      <button data-kind="vod">Films</button>
+      <button data-kind="series">Series</button>
+    </div>
+    <div class="bar">
+      <input type="text" id="search" placeholder="Zoeken…">
+      <button id="all">Alles aan</button>
+      <button id="none">Alles uit</button>
+    </div>
+    <p class="hint" id="catinfo"></p>
+    <div id="catmsg"></div>
+    <div class="list" id="list"></div>
+    <div class="bar" style="margin-top:12px">
+      <button class="primary" id="savecats">Opslaan</button>
+      <span class="hint" id="dirty"></span>
+    </div>
+    <p class="hint">Bij zoeken werken “Alles aan” en “Alles uit” alleen op de zichtbare regels.
+    Na het opslaan moet je in je IPTV-app de lijst verversen.</p>
+  </div>
+</section>
+
+<section id="tab-settings" class="hidden">
+  <div class="card">
+    <h2>Je IPTV-provider</h2>
+    <label>Server-URL</label><input type="text" id="upstream_url" placeholder="http://voorbeeld.tv:8080" autocomplete="off">
+    <div class="row">
+      <div><label>Gebruikersnaam</label><input type="text" id="upstream_username" autocomplete="off"></div>
+      <div><label>Wachtwoord</label><input type="text" id="upstream_password" autocomplete="off"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Inloggegevens voor je IPTV-app</h2>
+    <p class="hint">Deze vul je in je app in, in plaats van de gegevens van je provider. Alleen letters, cijfers, punt, streepje en underscore.</p>
+    <div class="row">
+      <div><label>Gebruikersnaam</label><input type="text" id="proxy_username" autocomplete="off"></div>
+      <div><label>Wachtwoord (minimaal 10 tekens)</label><input type="text" id="proxy_password" autocomplete="off"></div>
+    </div>
+    <div class="bar" style="margin-top:10px"><button id="genpw">Genereer wachtwoord</button></div>
+  </div>
+  <div class="card">
+    <h2>VPN (WireGuard)</h2>
+    <label class="check"><input type="checkbox" id="vpn_enabled"><span>Verkeer naar de provider alleen via de VPN<br><span class="hint">Staat dit aan en werkt de VPN niet, dan gaat er niets naar de provider. Zet je dit uit, dan gaat het verkeer via je eigen IP-adres.</span></span></label>
+    <div id="wginfo" class="hint"></div>
+    <label>WireGuard-configuratie (inhoud van het .conf-bestand)</label>
+    <textarea id="wg_config" placeholder="Leeg laten om de huidige configuratie te behouden.&#10;&#10;[Interface]&#10;Address = …&#10;PrivateKey = …&#10;&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = …" spellcheck="false"></textarea>
+    <p class="hint">De privésleutel wordt na het opslaan niet meer getoond.</p>
+    <div class="bar" style="margin-top:8px"><button id="delwg">VPN-configuratie verwijderen</button></div>
+  </div>
+  <div class="card">
+    <h2>Overig</h2>
+    <div class="row">
+      <div><label>Lijsten bewaren (uren)</label><input type="number" id="cache_hours" min="1" max="168"></div>
+      <div><label>User-agent naar de provider (leeg = die van je app)</label><input type="text" id="user_agent" autocomplete="off"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="show_new_categories"><span>Nieuwe categorieën van de provider automatisch tonen</span></label>
+  </div>
+  <div class="bar"><button class="primary" id="savesettings">Instellingen opslaan</button></div>
+</section>
+
+<section id="tab-status" class="hidden">
+  <div class="card"><h2>VPN</h2><div id="st-vpn" class="hint">Bezig met controleren…</div></div>
+  <div class="card"><h2>Account bij de provider</h2><div id="st-account" class="hint">Bezig met controleren…</div></div>
+  <div class="card"><h2>Zo stel je je IPTV-app in</h2><div id="st-app"></div></div>
+  <div class="card"><h2>Bewaarde lijsten</h2><div id="st-cache" class="hint"></div>
+    <div class="bar" style="margin-top:10px"><button id="clearcache">Lijsten opnieuw ophalen</button><button id="recheck">Status verversen</button></div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let state = null, kind = 'live', cats = [], dirty = false, wgDelete = false;
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} :
+    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || ('Fout ' + res.status));
+  return data;
+}
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.style.display = 'block';
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.style.display = 'none', 3500);
+}
+
+/* ---- tabbladen ---- */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  ['cats', 'settings', 'status'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+  if (b.dataset.tab === 'status') loadStatus();
+});
+
+/* ---- categorieën ---- */
+document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
+  if (dirty && !confirm('Je hebt wijzigingen die nog niet zijn opgeslagen. Toch wisselen?')) return;
+  kind = b.dataset.kind;
+  document.querySelectorAll('[data-kind]').forEach(x => x.classList.toggle('on', x === b));
+  loadCats();
+});
+function setDirty(v) { dirty = v; $('dirty').textContent = v ? 'Nog niet opgeslagen' : ''; }
+function visible() {
+  const q = $('search').value.trim().toLowerCase();
+  return cats.filter(c => !q || c.name.toLowerCase().includes(q));
+}
+function render() {
+  const rows = visible();
+  $('list').innerHTML = rows.map(c =>
+    `<label class="cat"><input type="checkbox" data-id="${esc(c.id)}" ${c.enabled ? 'checked' : ''}>
+     <span class="name">${esc(c.name)} ${c.new ? '<span class="tag">nieuw</span>' : ''}</span>
+     <span class="n">${c.count ?? ''}</span></label>`).join('') ||
+    '<div class="cat">Geen categorieën gevonden.</div>';
+  const on = cats.filter(c => c.enabled).length;
+  $('catinfo').textContent = `${on} van ${cats.length} categorieën aan`;
+}
+$('list').onchange = (e) => {
+  const c = cats.find(x => x.id === e.target.dataset.id);
+  if (c) { c.enabled = e.target.checked; setDirty(true); render(); }
+};
+$('search').oninput = render;
+$('all').onclick = () => { visible().forEach(c => c.enabled = true); setDirty(true); render(); };
+$('none').onclick = () => { visible().forEach(c => c.enabled = false); setDirty(true); render(); };
+async function loadCats() {
+  const mine = kind;
+  setDirty(false); cats = []; $('catmsg').innerHTML = '';
+  $('list').innerHTML = '<div class="cat">Bezig met laden…</div>'; $('catinfo').textContent = '';
+  try {
+    const data = await api('api/categories?type=' + mine);
+    if (mine !== kind) return;
+    cats = data.categories; render();
+    if (!data.configured) $('catmsg').innerHTML =
+      '<div class="msg warn">Hier is nog niets gefilterd: je app ziet nu alles. Vink uit wat je niet wilt zien en klik op Opslaan.</div>';
+    api('api/counts?type=' + mine).then(counts => {
+      if (mine !== kind) return;
+      cats.forEach(c => c.count = counts[c.id] ?? 0); render();
+    }).catch(() => {});
+  } catch (e) {
+    if (mine !== kind) return;
+    $('list').innerHTML = ''; $('catmsg').innerHTML = `<div class="msg bad">${esc(e.message)}</div>`;
+  }
+}
+$('savecats').onclick = async () => {
+  try {
+    await api('api/categories', {type: kind, known: cats.map(c => c.id),
+                                 enabled: cats.filter(c => c.enabled).map(c => c.id)});
+    cats.forEach(c => c.new = false);
+    setDirty(false); $('catmsg').innerHTML = ''; render(); toast('Opgeslagen');
+  } catch (e) { toast(e.message); }
+};
+
+/* ---- instellingen ---- */
+const TEXT = ['upstream_url', 'upstream_username', 'upstream_password', 'proxy_username', 'proxy_password', 'user_agent', 'cache_hours'];
+const BOOL = ['vpn_enabled', 'show_new_categories'];
+function fillSettings() {
+  TEXT.forEach(k => $(k).value = state.settings[k]);
+  BOOL.forEach(k => $(k).checked = state.settings[k]);
+  $('wg_config').value = ''; wgDelete = false;
+  const wg = state.wg;
+  $('wginfo').innerHTML = !wg ? 'Er is nog geen WireGuard-configuratie opgeslagen.' :
+    wg.error ? `<span style="color:var(--bad)">${esc(wg.error)}</span>` :
+    `Opgeslagen configuratie: server <code>${esc(wg.endpoint)}</code>, adres <code>${esc(wg.address)}</code>`;
+}
+$('genpw').onclick = async () => { $('proxy_password').value = (await api('api/password', {})).password; };
+$('delwg').onclick = () => { wgDelete = true; $('wg_config').value = ''; $('wginfo').textContent = 'De configuratie wordt verwijderd zodra je opslaat.'; };
+$('savesettings').onclick = async () => {
+  const body = {};
+  TEXT.forEach(k => body[k] = $(k).value);
+  BOOL.forEach(k => body[k] = $(k).checked);
+  const wg = $('wg_config').value.trim();
+  body.wg_config = wg ? wg : (wgDelete ? '' : null);
+  try { state = await api('api/settings', body); fillSettings(); toast('Instellingen opgeslagen'); loadCats(); }
+  catch (e) { toast(e.message); }
+};
+
+/* ---- status ---- */
+async function loadStatus() {
+  $('st-vpn').innerHTML = $('st-account').innerHTML = 'Bezig met controleren…';
+  const s = state.settings;
+  $('st-app').innerHTML = !state.proxy_ready ?
+    '<div class="msg warn">Stel eerst bij Instellingen de inloggegevens voor je app in.</div>' :
+    `<dl><dt>Server</dt><dd>het adres van je Cloudflare-subdomein, bijvoorbeeld <code>https://iptv.jouwdomein.nl</code></dd>
+     <dt>Gebruikersnaam</dt><dd><code>${esc(s.proxy_username)}</code></dd>
+     <dt>Wachtwoord</dt><dd><code>${esc(s.proxy_password)}</code></dd></dl>
+     <p class="hint">Voor Cloudflare: laat het subdomein verwijzen naar <code>http://homeassistant:${state.port}</code>
+     (of naar <code>http://${esc(state.hostname)}:${state.port}</code>).</p>`;
+  let st;
+  try { st = await api('api/status'); } catch (e) { $('st-vpn').innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; return; }
+  const v = st.vpn, ip = (x) => x && x.ok ? `<code>${esc(x.ip)}</code>${x.country ? ' (' + esc(x.country) + ')' : ''}` : '<em>onbekend</em>';
+  let html;
+  if (!v.enabled) html = '<div class="msg bad">De VPN staat uit. Verkeer naar de provider gaat via je eigen IP-adres.</div>';
+  else if (!v.configured) html = `<div class="msg bad">Er is geen geldige WireGuard-configuratie. Er gaat niets naar de provider.${v.error ? ' ' + esc(v.error) : ''}</div>`;
+  else if (v.safe) html = '<div class="msg ok">De VPN werkt. Verkeer naar de provider gaat via de VPN.</div>';
+  else html = `<div class="msg bad">De VPN-verbinding werkt niet. Er gaat niets naar de provider.${v.error ? ' ' + esc(v.error) : ''}</div>`;
+  html += `<dl><dt>Je eigen IP-adres</dt><dd>${ip(v.home)}</dd>`;
+  if (v.enabled) html += `<dt>IP-adres via de VPN</dt><dd>${ip(v.tunnel)}</dd><dt>VPN-server</dt><dd>${esc(v.endpoint) || '-'}</dd>`;
+  $('st-vpn').innerHTML = html + '</dl>';
+  const a = st.account;
+  $('st-account').innerHTML = !a ? '<div class="msg warn">De gegevens van de provider zijn nog niet ingevuld.</div>' :
+    !a.ok ? `<div class="msg bad">${esc(a.error)}</div>` :
+    `<div class="msg ok">Inloggen bij de provider is gelukt.</div><dl>
+     <dt>Status</dt><dd>${esc(a.status ?? '-')}</dd><dt>Geldig tot</dt><dd>${esc(a.expires ?? 'onbekend')}</dd>
+     <dt>Verbindingen</dt><dd>${esc(a.active_connections ?? '?')} van ${esc(a.max_connections ?? '?')} in gebruik</dd></dl>`;
+  $('st-cache').innerHTML = st.cache.length ? '<dl>' + st.cache.map(c =>
+    `<dt>${esc(c.name)}</dt><dd>${(c.size / 1048576).toFixed(1)} MB, ${c.age_minutes} min oud</dd>`).join('') + '</dl>' :
+    'Er zijn nog geen lijsten opgehaald.';
+}
+$('recheck').onclick = loadStatus;
+$('clearcache').onclick = async () => { await api('api/cache/clear', {}); toast('De lijsten worden bij het volgende verzoek opnieuw opgehaald'); loadStatus(); };
+
+(async () => {
+  try { state = await api('api/state'); } catch (e) { toast(e.message); return; }
+  fillSettings();
+  if (state.upstream_ready) loadCats();
+  else { $('list').innerHTML = ''; $('catmsg').innerHTML = '<div class="msg warn">Vul eerst bij Instellingen de gegevens van je provider in.</div>'; }
+})();
+</script>
+</body>
+</html>

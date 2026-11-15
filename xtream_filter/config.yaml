@@ -1,0 +1,21 @@
+name: Xtream Filter
+version: "0.1.0"
+slug: xtream_filter
+description: Filterproxy voor Xtream IPTV - verberg categorieën die je niet wilt zien
+url: https://github.com/beowhy-nl/ha-xtream-filter
+arch:
+  - aarch64
+  - amd64
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:filter-variant
+panel_title: IPTV Filter
+ports:
+  8899/tcp: 8899
+ports_description:
+  8899/tcp: Xtream-API voor je IPTV-app
+options:
+  log_level: info
+schema:
+  log_level: list(debug|info|warning|error)
